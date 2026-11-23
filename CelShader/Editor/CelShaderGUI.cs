@@ -12,7 +12,7 @@ public class CelShaderGUI : ShaderGUI
         MaterialProperty maintex = FindProperty("_MainTex", properties);
         materialEditor.ShaderProperty(maintex, "テクスチャー");
         EditorGUILayout.Space();
-        EditorGUILayout.LabelField("陰影", EditorStyles.boldLabel);
+        EditorGUILayout.LabelField("影", EditorStyles.boldLabel);
         MaterialProperty rampmap = FindProperty("_RampMap", properties);
         materialEditor.ShaderProperty(rampmap, "ランプ");
         DrawRampEditor(rampmap);
@@ -22,8 +22,29 @@ public class CelShaderGUI : ShaderGUI
         materialEditor.ShaderProperty(shadingStrength, "陰影の強さ");
         MaterialProperty receiveShadow = FindProperty("_ReceiveShadow", properties);
         materialEditor.ShaderProperty(receiveShadow, "落ちる影の強さ");
+        EditorGUILayout.Space();
+        EditorGUILayout.LabelField("光", EditorStyles.boldLabel);
         MaterialProperty ambientStrength = FindProperty("_AmbientStrength", properties);
         materialEditor.ShaderProperty(ambientStrength, "環境光の強さ");
+        MaterialProperty rimColor = FindProperty("_RimColor", properties);
+        materialEditor.ShaderProperty(rimColor, "リムの色");
+        MaterialProperty rimWidth = FindProperty("_RimWidth", properties);
+        materialEditor.ShaderProperty(rimWidth, "リムの幅");
+        MaterialProperty rimBlur = FindProperty("_RimBlur", properties);
+        materialEditor.ShaderProperty(rimBlur, "リムのぼかし");
+        MaterialProperty rimStrength = FindProperty("_RimStrength", properties);
+        materialEditor.ShaderProperty(rimStrength, "リムの強さ");
+        MaterialProperty highlightmask = FindProperty("_HighlightMask", properties);
+        materialEditor.ShaderProperty(highlightmask, "ハイライトのマスク");
+        MaterialProperty highlightcolor = FindProperty("_HighlightColor", properties);
+        materialEditor.ShaderProperty(highlightcolor, "ハイライトの色");
+        MaterialProperty highlightsize = FindProperty("_HighlightSize", properties);
+        materialEditor.ShaderProperty(highlightsize, "ハイライトの大きさ");
+        MaterialProperty highlightblur = FindProperty("_HighlightBlur", properties);
+        materialEditor.ShaderProperty(highlightblur, "ハイライトのぼかし");
+        MaterialProperty highlightstrength = FindProperty("_HighlightStrength", properties);
+        materialEditor.ShaderProperty(highlightstrength, "ハイライトの強さ");
+
         EditorGUILayout.Space();
         EditorGUILayout.LabelField("アウトライン", EditorStyles.boldLabel);
         MaterialProperty outlineColor = FindProperty("_OutlineColor", properties);
@@ -48,7 +69,7 @@ public class CelShaderGUI : ShaderGUI
     {
         RampAsset rampAsset = null;
         Texture tex = rampProp.textureValue;
-        if ( tex != null)
+        if (tex != null)
         {
             string texPath = AssetDatabase.GetAssetPath(tex);
             string assetPath = Path.ChangeExtension(texPath, ".asset");
