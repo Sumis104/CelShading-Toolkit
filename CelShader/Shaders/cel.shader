@@ -14,6 +14,16 @@ Shader "Custom/CelShader"
         _ShadeOffset("Shade Offset", Range(-1,1)) = 0
         [Toggle(_ALPHATEST_ON)] _AlphaTest("AlphaTest", Float) = 0
         _Cutoff ("cutoff", Range(0,1)) = 0.5
+        _RimColor ("RimColor", Color) = (1,1,1,1)
+        _RimWidth ("RimWidth", Range(0,1)) = 0.3
+        _RimBlur ("RimBlur", Range(0.001,1)) = 0.001
+        _RimStrength ("RimStrength", Range(0,4)) = 0
+        _HighlightMask ("HighlightMask", 2D) = "white" {}
+        _HighlightColor ("HighlightColor", color) = (1,1,1,1)
+        _HighlightSize ("HighlightSize", Range(0,0.2)) = 0.05
+        _HighlightBlur ("HighlightBlur", Range(0.001,0.1)) = 0.01
+        _HighlightStrength ("HighlightStrength", Range(0,4)) = 0
+
 
     }
     SubShader
@@ -29,6 +39,15 @@ Shader "Custom/CelShader"
                 half _ReceiveShadow;
                 half _ShadeOffset;
                 half _Cutoff;
+                half4 _RimColor;
+                half _RimWidth;
+                half _RimBlur;
+                half _RimStrength;
+                half4 _HighlightColor;
+                half _HighlightSize;
+                half _HighlightBlur;
+                half _HighlightStrength;
+
         CBUFFER_END
         TEXTURE2D(_MainTex);
         SAMPLER(sampler_MainTex);
@@ -52,6 +71,8 @@ Shader "Custom/CelShader"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
             TEXTURE2D(_RampMap);
             SAMPLER(sampler_RampMap);
+            TEXTURE2D(_HighlightMask);
+            SAMPLER(sampler_HighlightMask);
 
             struct Attributes
             {
@@ -81,9 +102,12 @@ Shader "Custom/CelShader"
             {
                 float3 N = normalize(IN.normalWS);
                 N *= IS_FRONT_VFACE(isFrontFace, 1.0, -1.0);
-
+                float3 V = GetWorldSpaceNormalizeViewDir(IN.positionWS);
+                
                 half4 basecolor = SAMPLE_TEXTURE2D(_MainTex,sampler_MainTex,IN.uv);
                 clipping(basecolor.a);
+                half fresnel = 1 - dot(N,V);
+                fresnel = smoothstep(1 - _RimWidth, 1 - _RimWidth + _RimBlur, fresnel);
                 float4 shadowCoord = TransformWorldToShadowCoord(IN.positionWS);
                 Light light = GetMainLight(shadowCoord);
 
@@ -94,7 +118,13 @@ Shader "Custom/CelShader"
                 float rampU = NdotL * 0.5 + 0.5;
                 rampU = saturate(rampU + _ShadeOffset) * shadow;
                 half3 ramp = SAMPLE_TEXTURE2D(_RampMap, sampler_RampMap, float2(rampU, 0.5)).rgb;
-                return half4(basecolor.rgb * _BaseColor.rgb * (lerp(1, ramp, _ShadingStrength) * light.color + SampleSH(N) * _AmbientStrength),1);
+                half highlightmask = SAMPLE_TEXTURE2D(_HighlightMask,sampler_HighlightMask,IN.uv).r;
+                float3 H = normalize(L + V);
+                half highlight = smoothstep(1 - _HighlightSize, 1 - _HighlightSize + _HighlightBlur, dot(N, H));
+                half3 color = basecolor.rgb * _BaseColor.rgb * (lerp(1, ramp, _ShadingStrength) * light.color + SampleSH(N) * _AmbientStrength);
+                color += fresnel * _RimStrength * _RimColor.rgb * SampleSH(-V);
+                color += highlight * highlightmask * _HighlightColor.rgb * _HighlightStrength * light.color;
+                return half4(color,1);
             }
             ENDHLSL
         }
