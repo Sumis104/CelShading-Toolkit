@@ -34,6 +34,15 @@ public class CelShaderGUI : ShaderGUI
         EditorGUILayout.LabelField("描画", EditorStyles.boldLabel);
         MaterialProperty cull = FindProperty("_Cull", properties);
         materialEditor.ShaderProperty(cull, "両面表示");
+        MaterialProperty alphaTest = FindProperty("_AlphaTest", properties);
+        materialEditor.ShaderProperty(alphaTest, "切り抜き");
+        if (alphaTest.floatValue > 0.5f)
+        {
+            EditorGUI.indentLevel++;
+            MaterialProperty cutoff = FindProperty("_Cutoff", properties);
+            materialEditor.ShaderProperty(cutoff, "切り抜きの閾値");
+            EditorGUI.indentLevel--;
+        }
     }
     void DrawRampEditor(MaterialProperty rampProp)
     {

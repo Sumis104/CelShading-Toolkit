@@ -12,6 +12,8 @@ Shader "Custom/CelShader"
         _ShadingStrength ("Shading Strength",Range(0,1)) = 1
         _ReceiveShadow ("Receive Shadow", Range(0,1)) = 1
         _ShadeOffset("Shade Offset", Range(-1,1)) = 0
+        [Toggle(_ALPHATEST_ON)] _AlphaTest("AlphaTest", Float) = 0
+        _Cutoff ("cutoff", Range(0,1)) = 0.5
 
     }
     SubShader
@@ -26,7 +28,16 @@ Shader "Custom/CelShader"
                 half _ShadingStrength;
                 half _ReceiveShadow;
                 half _ShadeOffset;
+                half _Cutoff;
         CBUFFER_END
+        TEXTURE2D(_MainTex);
+        SAMPLER(sampler_MainTex);
+        void clipping(half alpha)
+        {
+            #if defined(_ALPHATEST_ON)
+                clip(alpha - _Cutoff);
+            #endif
+        }
         ENDHLSL
         Pass
         {
@@ -37,12 +48,10 @@ Shader "Custom/CelShader"
             #pragma fragment frag
             #pragma multi_compile _ _MAIN_LIGHT_SHADOWS _MAIN_LIGHT_SHADOWS_CASCADE _MAIN_LIGHT_SHADOWS_SCREEN
             #pragma multi_compile_fragment _ _SHADOWS_SOFT _SHADOWS_SOFT_LOW _SHADOWS_SOFT_MEDIUM _SHADOWS_SOFT_HIGH
+            #pragma shader_feature_local_fragment _ALPHATEST_ON
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
-
             TEXTURE2D(_RampMap);
-            TEXTURE2D(_MainTex);
             SAMPLER(sampler_RampMap);
-            SAMPLER(sampler_MainTex);
 
             struct Attributes
             {
@@ -68,10 +77,13 @@ Shader "Custom/CelShader"
                 OUT.uv = IN.uv;
                 return OUT;
             }
-            half4 frag (Varyings IN) : SV_Target
+            half4 frag (Varyings IN, FRONT_FACE_TYPE isFrontFace : FRONT_FACE_SEMANTIC) : SV_Target
             {
                 float3 N = normalize(IN.normalWS);
+                N *= IS_FRONT_VFACE(isFrontFace, 1.0, -1.0);
 
+                half4 basecolor = SAMPLE_TEXTURE2D(_MainTex,sampler_MainTex,IN.uv);
+                clipping(basecolor.a);
                 float4 shadowCoord = TransformWorldToShadowCoord(IN.positionWS);
                 Light light = GetMainLight(shadowCoord);
 
@@ -82,8 +94,7 @@ Shader "Custom/CelShader"
                 float rampU = NdotL * 0.5 + 0.5;
                 rampU = saturate(rampU + _ShadeOffset) * shadow;
                 half3 ramp = SAMPLE_TEXTURE2D(_RampMap, sampler_RampMap, float2(rampU, 0.5)).rgb;
-                half3 basecolor = SAMPLE_TEXTURE2D(_MainTex,sampler_MainTex,IN.uv).rgb;
-                return half4(basecolor * _BaseColor.rgb * (lerp(1, ramp, _ShadingStrength) * light.color + SampleSH(N) * _AmbientStrength),1);
+                return half4(basecolor.rgb * _BaseColor.rgb * (lerp(1, ramp, _ShadingStrength) * light.color + SampleSH(N) * _AmbientStrength),1);
             }
             ENDHLSL
         }
@@ -96,26 +107,39 @@ Shader "Custom/CelShader"
             HLSLPROGRAM
             #pragma vertex OutlineVert
             #pragma fragment OutlineFrag
+            #pragma shader_feature_local_fragment _ALPHATEST_ON
 
             struct Attributes
             {
                 float4 positionOS : POSITION;
                 float3 normalOS : NORMAL;
+                float2 uv : TEXCOORD0;
+            };
+
+            struct Varyings
+            {
+                float4 positionCS : SV_POSITION;
+                float2 uv : TEXCOORD0;
             };
             
-            float4 OutlineVert (Attributes IN) : SV_POSITION
+            Varyings OutlineVert (Attributes IN)
             {
+                Varyings OUT;
                 float4 positionCS = TransformObjectToHClip(IN.positionOS.xyz);
                 float3 normalWS = TransformObjectToWorldNormal(IN.normalOS);
                 float3 normalCS = TransformWorldToHClipDir(normalWS);
                 float2 normalizenormalCS = normalize(normalCS.xy);
                 float2 pixelsize = 2 / _ScreenParams.xy;
                 positionCS.xy += normalizenormalCS * _OutlineWidth * pixelsize * positionCS.w;
-                return positionCS;
+                OUT.positionCS = positionCS;
+                OUT.uv = IN.uv;
+                return OUT;
             }
 
-            float4 OutlineFrag () : SV_Target
+            float4 OutlineFrag (Varyings IN) : SV_Target
             {
+                half4 basecolor = SAMPLE_TEXTURE2D(_MainTex,sampler_MainTex,IN.uv);
+                clipping(basecolor.a);
                 clip(_OutlineWidth - 0.0001);
                 return _OutlineColor;    
             }
@@ -133,6 +157,7 @@ Shader "Custom/CelShader"
             #pragma vertex ShadowVert
             #pragma fragment ShadowFrag
             #pragma multi_compile_vertex _ _CASTING_PUNCTUAL_LIGHT_SHADOW
+            #pragma shader_feature_local_fragment _ALPHATEST_ON
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Shadows.hlsl"
             
             float3 _LightDirection;
@@ -142,10 +167,18 @@ Shader "Custom/CelShader"
             {
                 float4 positionOS : POSITION;
                 float3 normalOS : NORMAL;
+                float2 uv : TEXCOORD0;
             };
 
-            float4 ShadowVert (Attributes IN) : SV_POSITION
+            struct Varyings
             {
+                float4 positionCS : SV_POSITION;
+                float2 uv : TEXCOORD0;
+            };
+
+            Varyings ShadowVert (Attributes IN)
+            {
+                Varyings OUT;
                 float3 positionWS = TransformObjectToWorld(IN.positionOS.xyz);
                 float3 normalWS = TransformObjectToWorldNormal(IN.normalOS);
             #if _CASTING_PUNCTUAL_LIGHT_SHADOW
@@ -159,11 +192,16 @@ Shader "Custom/CelShader"
             #else
                 positionCS.z = max(positionCS.z,UNITY_NEAR_CLIP_VALUE);
             #endif
-
-                return positionCS;
+                OUT.positionCS = positionCS;
+                OUT.uv = IN.uv;
+                return OUT;
             }
-            half4 ShadowFrag () : SV_Target
+
+            half4 ShadowFrag (Varyings IN) : SV_Target
             {
+                half4 basecolor = SAMPLE_TEXTURE2D(_MainTex,sampler_MainTex,IN.uv);
+                clipping(basecolor.a);
+
                 return 0;
             }
             ENDHLSL
